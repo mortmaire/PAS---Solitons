@@ -13,8 +13,6 @@
 using namespace std;
 using namespace png;
 
-int seed=112233;
-int gpid=getpid();
 
 class parameters{
 public:
@@ -32,7 +30,7 @@ public:
  double gest;
  int N;
  parameters(double dx=0.1,double L=200,double gamma=0.01,double T=1,
-double mu=1,double g=0.01,double dt=0.01,double time=2000,double valmax=20,double gest=1.,double N=2048):
+double mu=1,double g=0.01,double dt=0.01,double time=10000,double valmax=20,double gest=1.,double N=2048):
 dx(dx),L(L),gamma(gamma),T(T),mu(mu),g(g),dt(dt),time(time),valmax(valmax),
 gest(gest),N(N){
     N=pow(2,ceil(log2(L/dx)));
@@ -279,28 +277,63 @@ public:
         return pair<double,double>(n0,d0);
  }
  pair<double,double> GetStatistics(double** buff=NULL,double part=1,int threshold=0){
-     bool f=0;
-     if(buff==NULL){
-         f=1;
+     double **buff2;
+     if(buff==NULL)buff2=zapis;
+     else buff2=buff;
          buff=new double*[p.time];
          for(int t=0;t<p.time;t++){buff[t]=new double[N];
-         for(int i=0;i<N;i++)buff[t][i]=zapis[t][i];
+         for(int i=0;i<N;i++)buff[t][i]=buff2[t][i];
          }
-    }
+
      bw(buff,threshold,gestosc*part);
      pair<double,double> ss=statystyka(buff);
-     if(f){for(int i=0;i<p.time;i++)delete[] buff[i];
-     delete[] buff;}
+     for(int i=0;i<p.time;i++)delete[] buff[i];
+     delete[] buff;
+     if(ss.first==1.)return pair<double,double>(0,0);
      return ss;
  }
+ 
+ void DoFFTCutoff(double sigma=0){
+        char ss[64];
+        sprintf(ss,"%d.txt",(int)getpid());
+        fstream file(ss,ios::out|ios::app);
+        double** buff;
+        buff=new double*[p.time];
+        for(int i=0;i<p.time;i++)buff[i]=new double[N];
+        for(int t=0;t<p.time;t++){
+                for(int i=0;i<N;i++){in[i][0]=zapis[t][i];in[i][1]=0;}
+                if(sigma!=0){
+                fftw_execute(p2);
+                for(int i=0;i<N;i++){
+                    double m=(exp(-i*i/sigma/sigma/2)+exp(-(i-N)*(i-N)/sigma/sigma/2))/(1+exp(-N*N/sigma/sigma/2));            
+                    out[i][0]*=m;
+                    out[i][1]*=m;}
+                fftw_execute(p1);}
+                for(int i=0;i<N;i++)buff[t][i]=abs(complex(in[i][0],in[i][1]))/N;
+                }
+            for(int i=0;i<200;i+=10){
+            pair<double,double> ss=GetStatistics(buff,i/100.,500);
+            file<<sigma<<" "<<i<<" "<<ss.first<<" "<<ss.second<<endl;
+            }
+        for(int i=0;i<p.time;i++)delete[] buff[i];
+        delete[] buff;
+        file.close();
+        }
 };
 
 int main(){
+    int n=10;
+    int x=1;
+    x=(fork()==0)*8+(fork()==0)*4+(fork()==0)*2+(fork()==0)+1;
+    if(x>n)return 0;
+    for(p0.T=x;p0.T<1000;p0.T+=n){
     ffal psi;
-    psi.evolve(2000);
-    for(int i=0;i<200;i++)
-        for(int j=0;j<2000;j++){
-            pair<double,double> ss=psi.GetStatistics(0,i/100.,j);
-            cout<<i<<" "<<j<<" "<<ss.first<<" "<<ss.second<<endl;
-        }
+    psi.evolve();
+    psi.DoFFTCutoff(0);
+    psi.DoFFTCutoff(10);
+    psi.DoFFTCutoff(50);
+    psi.DoFFTCutoff(100);
+    psi.DoFFTCutoff(200);
+    psi.DoFFTCutoff(500);
+}
 }
